@@ -1,0 +1,240 @@
+version: "3.9"
+
+networks:
+  smarthire-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  mongo_data:
+  redis_data:
+  kafka_data:
+  minio_data:
+
+services:
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: smarthire-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: smarthire
+      POSTGRES_PASSWORD: smarthire123
+      POSTGRES_MULTIPLE_DATABASES: auth_db,job_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init-multiple-dbs.sh:/docker-entrypoint-initdb.d/init-multiple-dbs.sh
+    ports:
+      - "5432:5432"
+    networks:
+      - smarthire-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smarthire"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── MongoDB ───────────────────────────────────────────────────────────
+  mongo:
+    image: mongo:7
+    container_name: smarthire-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: smarthire
+      MONGO_INITDB_ROOT_PASSWORD: smarthire123
+      MONGO_INITDB_DATABASE: smarthire
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      - smarthire-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ─────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: smarthire-redis
+    restart: unless-stopped
+    command: redis-server --requirepass smarthire123 --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - smarthire-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "smarthire123", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Zookeeper ─────────────────────────────────────────────────────────
+  zookeeper:
+    image: bitnami/zookeeper:3.9
+    container_name: smarthire-zookeeper
+    restart: unless-stopped
+    environment:
+      ALLOW_ANONYMOUS_LOGIN: "yes"
+      ZOO_HEAP_SIZE: 256
+    networks:
+      - smarthire-net
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc localhost 2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Kafka ─────────────────────────────────────────────────────────────
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: smarthire-kafka
+    restart: unless-stopped
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_CFG_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,EXTERNAL://:9093
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9093
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_CFG_NUM_PARTITIONS: 3
+      KAFKA_CFG_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_HEAP_OPTS: "-Xmx512m -Xms256m"
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+    volumes:
+      - kafka_data:/bitnami/kafka
+    ports:
+      - "9093:9093"
+    networks:
+      - smarthire-net
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ── Kafka topic init ──────────────────────────────────────────────────
+  kafka-init:
+    image: bitnami/kafka:3.7
+    container_name: smarthire-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - smarthire-net
+    entrypoint: ["/bin/bash", "-c"]
+    command: |
+      "
+      echo 'Creating Kafka topics...'
+      kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic application.submitted --partitions 6 --replication-factor 1
+      kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic resume.parsed --partitions 6 --replication-factor 1
+      kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic candidate.ranked --partitions 6 --replication-factor 1
+      kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic interview.scheduled --partitions 3 --replication-factor 1
+      kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic job.created --partitions 3 --replication-factor 1
+      kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic notification.send --partitions 3 --replication-factor 1
+      kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic user.registered --partitions 3 --replication-factor 1
+      echo 'All topics created successfully!'
+      kafka-topics.sh --bootstrap-server kafka:9092 --list
+      "
+    restart: on-failure
+
+  # ── Kafka UI ──────────────────────────────────────────────────────────
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: smarthire-kafka-ui
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: smarthire-local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      SERVER_PORT: 8989
+    ports:
+      - "8989:8989"
+    networks:
+      - smarthire-net
+
+  # ── MinIO (S3-compatible file storage) ────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: smarthire-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: smarthire
+      MINIO_ROOT_PASSWORD: smarthire123
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web console
+    networks:
+      - smarthire-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── MinIO bucket init ─────────────────────────────────────────────────
+  minio-init:
+    image: minio/mc:latest
+    container_name: smarthire-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - smarthire-net
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      "
+      mc alias set local http://minio:9000 smarthire smarthire123
+      mc mb --ignore-existing local/smarthire-resumes
+      mc anonymous set download local/smarthire-resumes
+      echo 'MinIO bucket smarthire-resumes created!'
+      "
+    restart: on-failure
+
+  # ── Prometheus ────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: smarthire-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - smarthire-net
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+
+  # ── Grafana ───────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: smarthire-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3000:3000"
+    networks:
+      - smarthire-net
+    depends_on:
+      - prometheus
