@@ -1,5 +1,3 @@
-version: "3.9"
-
 networks:
   smarthire-net:
     driver: bridge
@@ -13,7 +11,6 @@ volumes:
 
 services:
 
-  # ── PostgreSQL ────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: smarthire-postgres
@@ -35,7 +32,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── MongoDB ───────────────────────────────────────────────────────────
   mongo:
     image: mongo:7
     container_name: smarthire-mongo
@@ -56,7 +52,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Redis ─────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: smarthire-redis
@@ -74,57 +69,40 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Zookeeper ─────────────────────────────────────────────────────────
-  zookeeper:
-    image: bitnami/zookeeper:3.9
-    container_name: smarthire-zookeeper
-    restart: unless-stopped
-    environment:
-      ALLOW_ANONYMOUS_LOGIN: "yes"
-      ZOO_HEAP_SIZE: 256
-    networks:
-      - smarthire-net
-    healthcheck:
-      test: ["CMD-SHELL", "echo ruok | nc localhost 2181"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # ── Kafka ─────────────────────────────────────────────────────────────
   kafka:
-    image: bitnami/kafka:3.7
+    image: apache/kafka:latest
     container_name: smarthire-kafka
     restart: unless-stopped
-    depends_on:
-      zookeeper:
-        condition: service_healthy
     environment:
-      KAFKA_CFG_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,EXTERNAL://:9093
-      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9093
-      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
-      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_CFG_NUM_PARTITIONS: 3
-      KAFKA_CFG_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
       KAFKA_HEAP_OPTS: "-Xmx512m -Xms256m"
-      ALLOW_PLAINTEXT_LISTENER: "yes"
     volumes:
-      - kafka_data:/bitnami/kafka
+      - kafka_data:/var/lib/kafka/data
     ports:
-      - "9093:9093"
+      - "9094:9094"
     networks:
       - smarthire-net
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
       interval: 15s
       timeout: 10s
       retries: 10
       start_period: 30s
 
-  # ── Kafka topic init ──────────────────────────────────────────────────
   kafka-init:
-    image: bitnami/kafka:3.7
+    image: apache/kafka:latest
     container_name: smarthire-kafka-init
     depends_on:
       kafka:
@@ -132,22 +110,19 @@ services:
     networks:
       - smarthire-net
     entrypoint: ["/bin/bash", "-c"]
-    command: |
+    command: >
       "
-      echo 'Creating Kafka topics...'
-      kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic application.submitted --partitions 6 --replication-factor 1
-      kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic resume.parsed --partitions 6 --replication-factor 1
-      kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic candidate.ranked --partitions 6 --replication-factor 1
-      kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic interview.scheduled --partitions 3 --replication-factor 1
-      kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic job.created --partitions 3 --replication-factor 1
-      kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic notification.send --partitions 3 --replication-factor 1
-      kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic user.registered --partitions 3 --replication-factor 1
-      echo 'All topics created successfully!'
-      kafka-topics.sh --bootstrap-server kafka:9092 --list
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic application.submitted --partitions 6 --replication-factor 1 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic resume.parsed --partitions 6 --replication-factor 1 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic candidate.ranked --partitions 6 --replication-factor 1 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic interview.scheduled --partitions 3 --replication-factor 1 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic job.created --partitions 3 --replication-factor 1 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic notification.send --partitions 3 --replication-factor 1 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic user.registered --partitions 3 --replication-factor 1 &&
+      echo 'All topics created!'
       "
     restart: on-failure
 
-  # ── Kafka UI ──────────────────────────────────────────────────────────
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: smarthire-kafka-ui
@@ -158,14 +133,11 @@ services:
     environment:
       KAFKA_CLUSTERS_0_NAME: smarthire-local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
-      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
-      SERVER_PORT: 8989
     ports:
-      - "8989:8989"
+      - "8989:8080"
     networks:
       - smarthire-net
 
-  # ── MinIO (S3-compatible file storage) ────────────────────────────────
   minio:
     image: minio/minio:latest
     container_name: smarthire-minio
@@ -177,8 +149,8 @@ services:
     volumes:
       - minio_data:/data
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # Web console
+      - "9000:9000"
+      - "9001:9001"
     networks:
       - smarthire-net
     healthcheck:
@@ -187,7 +159,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── MinIO bucket init ─────────────────────────────────────────────────
   minio-init:
     image: minio/mc:latest
     container_name: smarthire-minio-init
@@ -197,18 +168,17 @@ services:
     networks:
       - smarthire-net
     entrypoint: ["/bin/sh", "-c"]
-    command: |
+    command: >
       "
-      mc alias set local http://minio:9000 smarthire smarthire123
-      mc mb --ignore-existing local/smarthire-resumes
-      mc anonymous set download local/smarthire-resumes
-      echo 'MinIO bucket smarthire-resumes created!'
+      mc alias set local http://minio:9000 smarthire smarthire123 &&
+      mc mb --ignore-existing local/smarthire-resumes &&
+      mc anonymous set download local/smarthire-resumes &&
+      echo 'MinIO bucket ready!'
       "
     restart: on-failure
 
-  # ── Prometheus ────────────────────────────────────────────────────────
   prometheus:
-    image: prom/prometheus:v2.53.0
+    image: prom/prometheus:latest
     container_name: smarthire-prometheus
     restart: unless-stopped
     volumes:
@@ -221,9 +191,8 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.retention.time=7d"
 
-  # ── Grafana ───────────────────────────────────────────────────────────
   grafana:
-    image: grafana/grafana:11.0.0
+    image: grafana/grafana:latest
     container_name: smarthire-grafana
     restart: unless-stopped
     environment:
