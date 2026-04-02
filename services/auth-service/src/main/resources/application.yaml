@@ -1,0 +1,106 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: auth-service
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/auth_db
+    username: smarthire
+    password: smarthire123
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: smarthire123
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: REPLACE_ME.apps.googleusercontent.com
+            client-secret: GOCSPX-REPLACE_ME
+            scope: openid, email, profile
+            redirect-uri: "{baseUrl}/api/auth/oauth2/callback/google"
+        provider:
+          google:
+            authorization-uri: https://accounts.google.com/o/oauth2/v2/auth
+            token-uri: https://oauth2.googleapis.com/token
+            user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
+            user-name-attribute: sub
+
+  kafka:
+    bootstrap-servers: localhost:9094
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+
+jwt:
+  private-key: "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDPG1gz3QNBA33f
+5Tj+UenqGoA9J9EA9jlF5vLlu5F54vKMpDzmR0+umJEgF6zPpdX3/m0wOGG1Ve/p
+OZLp2RSvCcQLOiQ/RIkz17bTIAxcSBduCadPX84VNZPpsPd2pFcQObKcYkzsbNub
+zKPawmmfzuwyc7Uxvd8Hs8tPZmJT226XeullG9fC8NsAvVUewRMf7kq6xZ69YMsx
+PS0F2rkjT/pbc1F18G1SmzJa+DavUKOhsllMO3+4OMTpKlw/mtQxj5wqlKmgKS2Y
+SbWqtwlQ9Fwv8F7sG+QkD30CXkLm+skaW+Rz6HQVQAbrrrJ3V9MGgWAWdvFMfloe
+p27DM2aHAgMBAAECggEAOESgHpsd7rRxpvpilSoRKNLhY3wlWyMKZXT9KjBfMmPX
+7SEUEKZwPiniR/tWrqXKL9H2vWKcHUXHZDCJuzII3hODqV83CN9ofWbOm6a55PqL
+LxC9XaHUXkvLr3KukRPOObDLV5SXfKaItdgP7nfidZIk9wIbyPNinHebNavF7C0V
+S1L5ELgiA+s0E2pEL0JfLhuImELX6COZFOFpP322q2kuuS/giHAYXXFf6GYIxyNp
+qEtdCXuhV+erX51PsGu31m+RL7K9mGIz9nJUj14LQ5uIkpw6ars8hx2XRwlmO66z
+BlRpYcncSO8BvcntPyzcWgDAfMRwuamhyrJyXaBssQKBgQDoqLUtrgOwRVnNrWlV
+xUJ/Y/cs/TrnHdeaFwbMyzJcaNWnvrQKrHZIoaru/0NzhjkJO3Q8Y/9tsMzkV6C1
+5B1tmBu2bJ/mXNwQE9qoT2lOw5LQmxaPLXqAB5kA+JFZz2m/0i2AKfy9OR4gfJtM
+VUmbsWE90eRerVadrh+oyQPUMQKBgQDj4mOzie54ZHn5NaXa0q6oFgQlg7HOuJTi
+gfYMeyugkTdfH2boo1pmhLPUQGWPl8SgOCXWu38UYuuNph+s7omydA0CfHXIbgqf
+B0XTCdEz3jx8BAG6/5YM9Nf81K/mXcfKUJ8sc1bN/TuMFo7LRUlHYxWsn39V7N47
+OxBcBUnQNwKBgQC1L92ZK3GX7wpW0Pu9XhfBWbp/AN7Eaksjp1cWWhBoQwRQ1IUl
+4tVjDvQtmAGRkDAO7oxBE6cyZ4PJOCziOjpoxRKf6MxF/H8szil09hMO0eQeLQlO
+i55g4onXZbzccljql+Xzb79yJW8+4YuX0Lu4UlVmbXUp/lf8CESDj7g5oQKBgFjA
+bvwZmBqjZy27yyByNTuZd3v00mckVDfzTZSG0/LxG5Occ0PfevG6dR8RBXzrKtUL
+iREcbN3PuNWuAWAkdtRdhkOVnXm2AcT13CfZBvUgdIYIOXRO3m2lXglF/EvH8mvF
+AnkZYpFPMsXYczyPe36mBGb6p2kbm2GOG0z7ckf5AoGAJwrNuT9tRQyiAbAbRtwy
+LrkAu+tApKOj9LWcgekMkOryYxfMoKTCIQFBLpqZZP1ZJ+Gt47Z8M5Is2cfvsgP3
+rGGh34r1OMNkpD6nLa5Je9306R9mcnkhbNr0MSoF3RZZcXdCmROO5V4v951rzgA2
+3KAb4yqhmbVAk2qTQqsImD8="
+  public-key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzxtYM90DQQN93+U4/lHp
+6hqAPSfRAPY5Reby5buReeLyjKQ85kdPrpiRIBesz6XV9/5tMDhhtVXv6TmS6dkU
+rwnECzokP0SJM9e20yAMXEgXbgmnT1/OFTWT6bD3dqRXEDmynGJM7Gzbm8yj2sJp
+n87sMnO1Mb3fB7PLT2ZiU9tul3rpZRvXwvDbAL1VHsETH+5KusWevWDLMT0tBdq5
+I0/6W3NRdfBtUpsyWvg2r1CjobJZTDt/uDjE6SpcP5rUMY+cKpSpoCktmEm1qrcJ
+UPRcL/Be7BvkJA99Al5C5vrJGlvkc+h0FUAG666yd1fTBoFgFnbxTHaaHqduwzNm
+hwIDAQAB"
+  expiration-ms: 900000
+  refresh-expiration-ms: 604800000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, prometheus, info
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+logging:
+  level:
+    com.smarthire.auth_service: DEBUG
+    org.springframework.security: INFO
