@@ -23,6 +23,9 @@
 
     <modules>
         <module>auth-service</module>
+        <module>job-service</module>
+        <module>candidate-service</module>
+        <module>notification-service</module>
     </modules>
 
     <build>

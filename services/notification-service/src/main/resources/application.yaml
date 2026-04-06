@@ -1,0 +1,51 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: notification-service
+
+  data:
+    mongodb:
+      uri: mongodb://smarthire:smarthire123@localhost:27017/smarthire?authSource=admin
+
+  kafka:
+    bootstrap-servers: localhost:9094
+    consumer:
+      group-id: notification-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+
+sendgrid:
+  api-key: "PASTE_YOUR_SENDGRID_API_KEY_HERE"
+  from-email: "noreply@smarthire.dev"
+  from-name: "SmartHire"
+
+jwt:
+  public-key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzxtYM90DQQN93+U4/lHp
+6hqAPSfRAPY5Reby5buReeLyjKQ85kdPrpiRIBesz6XV9/5tMDhhtVXv6TmS6dkU
+rwnECzokP0SJM9e20yAMXEgXbgmnT1/OFTWT6bD3dqRXEDmynGJM7Gzbm8yj2sJp
+n87sMnO1Mb3fB7PLT2ZiU9tul3rpZRvXwvDbAL1VHsETH+5KusWevWDLMT0tBdq5
+I0/6W3NRdfBtUpsyWvg2r1CjobJZTDt/uDjE6SpcP5rUMY+cKpSpoCktmEm1qrcJ
+UPRcL/Be7BvkJA99Al5C5vrJGlvkc+h0FUAG666yd1fTBoFgFnbxTHaaHqduwzNm
+hwIDAQAB"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, prometheus, info
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+logging:
+  level:
+    com.smarthire.notification_service: DEBUG
